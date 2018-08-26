@@ -1,0 +1,32 @@
+# JSON to MessagePack #
+
+A simple program which outputs MessagePack data when given the path to a file
+containing JSON data:
+
+    json-to-msgpack myFile.json > myFile.msgpack
+
+The aim is to convert large JSON files (> 1GB) without running out of memory. To
+do this we need to avoid loading entire datastructures into memory. Instead we
+use multiple passes across the input file (hence why we need a real file rather
+than stdin).
+
+Note that we still use ordinary recursion to parse nested datastructures, so
+nesting thousands of objects and arrays will blow the stack.
+
+We also have no support for numbers at the moment; this is simply because the
+author didn't need it, and nobody's asked for it yet ;)
+
+The major difference between JSON and MessagePack is that JSON is delimited, so
+we don't know how large each value is until we've parsed the whole thing (e.g.
+to find the length of a string we need to keep reading bytes until we find an
+unescaped '"'; for arrays and objects we keep reading values until we hit ']' or
+ '}'). MessagePack uses length fields instead, which is better suited to
+streaming applications. To turn a JSON value into MessagePack we first emit the
+relevant MessagePack 'tag' byte to indicate whether it's true/false/null or a
+string/array/object. For the latter, we scan through the JSON to see how large
+the value is, we emit this length as a 32bit integer, then we rewind the JSON to
+start processing the contents (recursively, for arrays and objects).
+
+Note that JSON has a lot of redudancy, so our algorithm will accept lots of
+invalid data without complaint. For example we treat ',' and ':' as whitespace
+and we only look at the first byte of constants (`true`, `false` and `null`).
