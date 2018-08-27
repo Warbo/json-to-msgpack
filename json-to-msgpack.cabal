@@ -34,9 +34,14 @@ test-suite test
   type:                exitcode-stdio-1.0
   hs-source-dirs:      test
   main-is:             Main.hs
-  other-modules:       Parsing
+  other-modules:       Generators
+                     , Lengths
+                     , Writers
   build-depends:       base >=4.7
+                     , bytestring
                      , json-to-msgpack
+                     , data-msgpack
+                     , data-msgpack-types
                      , mtl
                      , QuickCheck == 2.*
                      , tasty
