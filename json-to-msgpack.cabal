@@ -47,3 +47,4 @@ test-suite test
                      , tasty
                      , tasty-discover
                      , tasty-quickcheck
+                     , text

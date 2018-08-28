@@ -7,7 +7,7 @@ import qualified Data.ByteString            as BS
 import qualified Data.ByteString.Char8      as BSC
 import qualified Data.ByteString.Lazy.Char8 as BSL
 import qualified Data.MessagePack           as MP
-import qualified Data.MessagePack.Types     as MP
+import qualified Data.Text                  as T
 import qualified Data.Word                  as W
 import           Generators
 import qualified JSONToMsgPack              as J
@@ -83,9 +83,11 @@ prop_writeString :: Int -> Property
 prop_writeString n' = forAll (genString n) checkResult
   where n             = abs n' `mod` 1000
         checkResult s = let ((), ((pre, post), out)) = run s
+                            Just (MP.ObjectStr s') = parseMP (reverse out)
                          in drop 5 (reverse out) === stripQuotes s .&&.
                             pre                  === reverse s     .&&.
-                            post                 === ""
+                            post                 === ""            .&&.
+                            T.unpack s'          === stripQuotes s
         run         s = runState (J.writeString writeImp ()) (("", s), "")
 
 prop_writeArray :: Int -> Property
@@ -94,11 +96,35 @@ prop_writeArray n' = forAll (genSizedArray n n) checkResult
         checkResult s = let ((), ((pre, post), out)) = run s
                          in pre  === reverse s .&&.
                             post === ""        .&&.
-                            case MP.unpack (BSL.pack (reverse out)) of
+                            case parseMP (reverse out) of
                               Just (MP.ObjectArray got) -> length got === n
                               Just x                    -> error (show x)
                               Nothing                   -> error "No parse"
         run         s = runState (J.writeArray writeImp ()) (("", s), "")
+
+prop_writeMap :: Int -> Property
+prop_writeMap n' = forAll (genObject n) checkResult
+  where n             = abs n' `mod` 1000
+        checkResult s = let ((), ((pre, post), out)) = run s
+                            Just (MP.ObjectMap kvs)  = parseMP (reverse out)
+                         in pre  === reverse s .&&.
+                            post === ""        .&&.
+                            forceMP (map fst kvs ++ map snd kvs)
+        run s         = runState (J.writeMap writeImp ()) (("", s), "")
+
+prop_writeValue :: Int -> Property
+prop_writeValue n' = forAll (genValue n) canParse
+  where n          = abs n' `mod` 1000
+        canParse s = let ((), ((pre, post), out)) = run s
+                         Just got                 = parseMP (reverse out)
+                      in counterexample (show (("pre" , reverse pre),
+                                               ("post", post       ),
+                                               ("out" , out        ),
+                                               ("got" , got        ))) $
+                         pre  === reverse s .&&.
+                         post === ""        .&&.
+                         forceMP [got]
+        run s        = runState (J.writeValue writeImp ()) (("", s), "")
 
 stripQuotes :: String -> String
 stripQuotes = go "" . reverse . drop 1 . reverse . drop 1
@@ -119,3 +145,20 @@ prop_parseLength w = pre    === "" .&&.
   where ((), ((pre, post), out)) = runState (J.writeInt32 writeImp w)
                                             (("", ""), "")
         parsed                   = fromIntegral (parseLength (reverse out))
+
+parseMP :: String -> Maybe MP.Object
+parseMP = MP.unpack . BSL.pack
+
+forceMP :: [MP.Object] -> Bool
+forceMP []     = True
+forceMP (x:xs) = case x of
+                 -- These are the only values we handle. Force their
+                 -- contents so we're not just skipping over byte ranges
+                 MP.ObjectNil         -> forceMP xs
+                 MP.ObjectBool  True  -> forceMP xs
+                 MP.ObjectBool  False -> forceMP xs
+                 MP.ObjectStr   s     -> T.length s > -1 && forceMP xs
+                 MP.ObjectArray ys    -> forceMP (ys ++ xs)
+                 MP.ObjectMap   ys    -> forceMP (map fst ys ++ map snd ys
+                                                             ++ xs)
+                 _                    -> error ("Unexpected " ++ show x)

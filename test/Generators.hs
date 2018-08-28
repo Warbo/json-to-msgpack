@@ -43,8 +43,8 @@ genObject :: Int -> Gen String
 genObject = go [] . abs
   where go acc n | n < 2 = pure (wrapObject acc)
         go acc n         = do x <- choose (0, n - 1)
-                              k <- genString x
-                              v <- genValue  x
+                              k <- genString (x + 1)  -- Need non-empty name
+                              v <- genValue   x
                               go ((k, v):acc) (n - x)
 
 genSizedObject :: Int -> Int -> Gen String
