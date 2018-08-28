@@ -39,18 +39,18 @@ io = I {
     tell      = hTell
   }
 
+spaceLike :: Char -> Bool
+spaceLike c = C.isSpace c || elem c ",:"
+
 -- | Seek the given handle forwards until it's at a nonspace char. We treat ','
 --   and ':' as space.
-chompSpace' :: Monad m => Imp handle m -> handle -> m ()
-chompSpace' i h = do
+spaceEater :: Monad m => Imp handle m -> handle -> m ()
+spaceEater i h = do
   x <- lookahead i h
   case x of
-    Nothing                             -> pure ()
-    Just c | C.isSpace c || elem c ",:" -> getchar i h >> chompSpace' i h
-    _                                   -> pure ()
-
-chompSpace :: Handle -> IO ()
-chompSpace = chompSpace' io
+    Nothing              -> pure ()
+    Just c | spaceLike c -> getchar i h >> spaceEater i h
+    _                    -> pure ()
 
 putBytes :: Monad m => Imp handle m -> [W.Word8] -> m ()
 putBytes i = mapM_ (putchar i) . BSC.unpack . BS.pack
@@ -101,7 +101,7 @@ arrayLength' i h = do x <- getchar i h
                         Nothing  -> error "Expected array, not EOF"
                         Just '[' -> go 0
                         Just c   -> error ("Expected array, not " ++ show c)
-  where go !n = do chompSpace' i h
+  where go !n = do spaceEater i h
                    c <- lookahead i h
                    case c of
                      Nothing  -> error "EOF reading array"
@@ -117,12 +117,12 @@ objectLength' i h = do x <- getchar i h
                          Nothing  -> error "EOF reading object"
                          Just '{' -> go 0
                          Just c   -> error ("Expected '{' not " ++ show c)
-  where go !n = do chompSpace' i h
+  where go !n = do spaceEater i h
                    c <- lookahead i h
                    case c of
                      Nothing  -> error "Unterminated object"
                      Just '}' -> getchar    i h >> pure n
-                     Just _   -> skipValue' i h >> chompSpace' i h >>
+                     Just _   -> skipValue' i h >> spaceEater i h >>
                                  skipValue' i h >> go (n+1)
 
 skipValue :: Handle -> IO ()
@@ -156,7 +156,7 @@ writeMap i h = do
 
   putBytes   i [0xdf]                                     -- Tag
   writeInt32 i (fromIntegral n)                           -- Len
-  replicateM_ (2*n) (writeValue i h >> chompSpace' i h)  -- Ks+vs
+  replicateM_ (2*n) (writeValue i h >> spaceEater i h)  -- Ks+vs
   x <- getchar i h  -- Ready for the next value
   case x of
     Just '}' -> pure ()
@@ -176,7 +176,7 @@ writeFixed i h = do x <- lookahead i h
                                    Nothing  -> error "Hit EOF"
                     putBytes i [b]
                     seek i h RelativeSeek n
-                    chompSpace' i h
+                    spaceEater i h
 
 -- | Read a JSON array from h and write the equivalent MsgPack to stdout.
 writeArray :: Monad m => Imp handle m -> handle -> m ()
@@ -187,7 +187,7 @@ writeArray i h = do
 
   putBytes   i [0xdd]                                -- Tag
   writeInt32 i (fromIntegral n)                      -- Length
-  replicateM_ n (writeValue i h >> chompSpace' i h)  -- Elements
+  replicateM_ n (writeValue i h >> spaceEater i h)  -- Elements
   Just ']' <- getchar i h -- Ready for the next value
   pure ()
 
@@ -215,7 +215,7 @@ writeString i h = do startPos <- tell i h
 -- | Reads a single JSON value from h, possibly prefixed by whitespace and/or
 --   ',' or ':'. Writes the equivalent MsgPack to stdout.
 writeValue :: Monad m => Imp handle m -> handle -> m ()
-writeValue i h = do chompSpace'    i h
+writeValue i h = do spaceEater     i h
                     c <- lookahead i h
                     case c of
                       Just '{' -> writeMap    i h

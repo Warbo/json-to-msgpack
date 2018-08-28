@@ -1,7 +1,6 @@
 module Lengths where
 
 import           Control.Monad.State.Lazy (get, put, runState, State)
-import           Data.List                (intercalate)
 import           Generators
 import qualified JSONToMsgPack            as J
 import           System.IO                (SeekMode(..))
@@ -10,11 +9,13 @@ import           Test.QuickCheck
 -- | Represent state as a zipper, so we can wind it forward and backwards
 type TestM = State (String, String)
 
-testImp :: J.Imp () TestM
-testImp = J.I {
+readImp :: J.Imp () TestM
+readImp = J.I {
     J.getchar   = getchar,
     J.lookahead = lookahead,
-    J.seek      = seek
+    J.seek      = seek,
+    J.putchar   = error "Shouldn't putchar when reading",
+    J.tell      = error "Reader's tell not implemented"
   }
   where getchar :: () -> TestM (Maybe Char)
         getchar () = do s <- get
@@ -51,14 +52,14 @@ prop_chompSpaces :: Property
 prop_chompSpaces = forAll genSpaces chomped
   where chomped s = let ((), (_, state)) = run ("", s)
                      in state === ""
-        run       = runState (J.chompSpace' testImp ())
+        run       = runState (J.spaceEater readImp ())
 
 prop_stringOfCorrectLength :: Int -> Property
 prop_stringOfCorrectLength n' = forAll (genString n) lengthMatch
   where n             = abs n' `mod` 1000
         lengthMatch s = let (result, (_, state)) = run ("", s)
                          in result === n .&&. state === ""
-        run           = runState (J.stringLength' testImp ())
+        run           = runState (J.stringLength' readImp ())
 
 prop_fixedLength :: Int -> Property
 prop_fixedLength n = let (result, (pre, post)) = run ("", choice)
@@ -70,7 +71,7 @@ prop_fixedLength n = let (result, (pre, post)) = run ("", choice)
                    1 -> "true"
                    2 -> "false"
                    _ -> undefined
-        run = runState (J.fixedLength' testImp ())
+        run = runState (J.fixedLength' readImp ())
 
 prop_arrayLength :: Int -> Property
 prop_arrayLength n' = forAll (genSizedArray n n) lengthMatches
@@ -79,7 +80,7 @@ prop_arrayLength n' = forAll (genSizedArray n n) lengthMatches
                            in result === n         .&&.
                               pre    === reverse s .&&.
                               post   === ""
-        run             = runState (J.arrayLength' testImp ())
+        run             = runState (J.arrayLength' readImp ())
 
 prop_objectLength :: Int -> Property
 prop_objectLength n' = forAll (genSizedObject n n) lengthMatches
@@ -88,4 +89,4 @@ prop_objectLength n' = forAll (genSizedObject n n) lengthMatches
                            in result === n         .&&.
                               pre    === reverse s .&&.
                               post   === ""
-        run             = runState (J.objectLength' testImp ())
+        run             = runState (J.objectLength' readImp ())
