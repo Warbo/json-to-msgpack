@@ -149,15 +149,15 @@ prop_parseLength w = pre    === "" .&&.
 parseMP :: String -> Maybe MP.Object
 parseMP = MP.unpack . BSL.pack
 
-forceMP :: [MP.Object] -> Bool
-forceMP []     = True
+forceMP :: [MP.Object] -> Property
+forceMP []     = property True
 forceMP (x:xs) = case x of
                  -- These are the only values we handle. Force their
                  -- contents so we're not just skipping over byte ranges
                  MP.ObjectNil         -> forceMP xs
                  MP.ObjectBool  True  -> forceMP xs
                  MP.ObjectBool  False -> forceMP xs
-                 MP.ObjectStr   s     -> T.length s > -1 && forceMP xs
+                 MP.ObjectStr   s     -> total s .&&. forceMP xs
                  MP.ObjectArray ys    -> forceMP (ys ++ xs)
                  MP.ObjectMap   ys    -> forceMP (map fst ys ++ map snd ys
                                                              ++ xs)
