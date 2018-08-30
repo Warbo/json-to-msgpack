@@ -18,8 +18,8 @@ data Imp handle m = I {
     lookahead :: handle -> m (Maybe Char),
     seek      :: handle -> SeekMode -> Integer -> m (),
 
-    putchar   :: Char   -> m (),
-    tell      :: handle -> m Integer
+    putchar   :: Char -> m (),
+    tell      :: handle  -> m Integer
   }
 
 maybeEOF :: IO Char -> IO (Maybe Char)
@@ -35,9 +35,12 @@ io = I {
     lookahead = maybeEOF . hLookAhead,
     seek      = hSeek,
 
-    putchar   = putChar,
+    putchar   = BS.putStr . BS.singleton . char2Byte,
     tell      = hTell
   }
+
+char2Byte :: Char -> W.Word8
+char2Byte = BS.head . BSC.pack . pure
 
 spaceLike :: Char -> Bool
 spaceLike c = C.isSpace c || elem c ",:"
@@ -225,5 +228,7 @@ writeValue i h = do spaceEater     i h
                       Nothing  -> error "Unexpected EOF"
 
 main :: IO ()
-main = do [f] <- getArgs
-          withFile f ReadMode (writeValue io)
+main = do args <- getArgs
+          case args of
+            [f] -> withFile f ReadMode (writeValue io)
+            _   -> error "Need one filepath argument"
