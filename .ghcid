@@ -1,2 +1,2 @@
 --command="nix-shell --run 'cabal new-repl --ghc-option=-Wall'"
---test=":! cabal new-test --ghc-option=-Wall && hlint ."
+--test=":! cabal new-test --ghc-option=-Wall && nix-build test.nix && hlint ."
