@@ -4,6 +4,5 @@
 , lzip ? nix-helpers.nixpkgs.lzip }:
 json-to-msgpack.haskellPackages.shellFor {
   packages = p: [ p.json-to-msgpack ];
-  withHoogle = true;
   buildInputs = [ cabal-install lzip ];
 }
