@@ -1,4 +1,4 @@
-{ json-to-msgpack ? import ./build.nix { }
+{ json-to-msgpack ? import ./json-to-msgpack.nix { }
 , nix-helpers ? import ./nix-helpers.nix { }, nixpkgs ? nix-helpers.nixpkgs }:
 nixpkgs.runCommand "test-json-to-msgpack" {
   buildInputs = [ json-to-msgpack nixpkgs.lzip ];
