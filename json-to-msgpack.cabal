@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                json-to-msgpack
-version:             0.1.0.0
+version:             0.1.1.0
 synopsis:            Command to efficiently convert JSON to MsgPack
 -- description:
 homepage:            http://chriswarbo.net/git/json-to-msgpack

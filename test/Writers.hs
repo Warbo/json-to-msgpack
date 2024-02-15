@@ -6,6 +6,7 @@ import           Control.Monad.State.Lazy   (get, put, replicateM_, runState, St
 import qualified Data.ByteString            as BS
 import qualified Data.ByteString.Char8      as BSC
 import qualified Data.ByteString.Lazy.Char8 as BSL
+import           Data.Functor.Identity      (Identity)
 import qualified Data.List                  as L
 import qualified Data.MessagePack           as MP
 import qualified Data.Text                  as T
@@ -18,6 +19,9 @@ import           Test.QuickCheck
 -- | Use a zipper for the file handle, so we can wind it forward and backwards.
 --   Use a (reversed) string as the output.
 type TestM = State ((String, String), String)
+
+instance MonadFail Identity where
+  fail = error
 
 writeImp :: J.Imp () TestM
 writeImp = J.I {

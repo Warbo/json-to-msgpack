@@ -64,19 +64,19 @@ putBytes i = mapM_ (putchar i) . BSC.unpack . BS.pack
 stringLength :: Handle -> IO Int
 stringLength = stringLength' io
 
-stringLength' :: Monad m => Imp handle m -> handle -> m Int
+stringLength' :: MonadFail m => Imp handle m -> handle -> m Int
 stringLength' i h = do x <- getchar i h
                        case x of
                          Just '"' -> go 0
-                         Just c   -> error ("Expected string, hit " ++ show c)
-                         Nothing  -> error "Expected string, hit EOF"
+                         Just c   -> fail ("Expected string, hit " ++ show c)
+                         Nothing  -> fail "Expected string, hit EOF"
 
   where go !n = do x <- getchar i h
                    case x of
-                     Nothing   -> error "Unterminated string"
+                     Nothing   -> fail "Unterminated string"
                      Just '\\' -> do y <- getchar i h
                                      case y of
-                                       Nothing -> error "Can't escape EOF"
+                                       Nothing -> fail "Can't escape EOF"
                                        Just  _ -> go (n+1)  -- Ignore \ and skip
                      Just '"'  -> pure n
                      Just _    -> go (n+1)
@@ -84,46 +84,46 @@ stringLength' i h = do x <- getchar i h
 fixedLength :: Handle -> IO Int
 fixedLength = fixedLength' io
 
-fixedLength' :: Monad m => Imp handle m -> handle -> m Int
+fixedLength' :: MonadFail m => Imp handle m -> handle -> m Int
 fixedLength' i h = do x <- getchar i h
-                      let n = case x of
-                                Nothing  -> error "Unexpected EOF"
-                                Just 'n' -> 3
-                                Just 't' -> 3
-                                Just 'f' -> 4
-                                Just c   -> error ("Unexpected char " ++ show c)
+                      n <- case x of
+                             Nothing  -> fail "Unexpected EOF"
+                             Just 'n' -> pure 3
+                             Just 't' -> pure 3
+                             Just 'f' -> pure 4
+                             Just c   -> fail ("Unexpected char " ++ show c)
                       seek i h RelativeSeek (fromIntegral n)
                       pure (n+1)
 
 arrayLength :: Handle -> IO Int
 arrayLength = arrayLength' io
 
-arrayLength' :: Monad m => Imp handle m -> handle -> m Int
+arrayLength' :: MonadFail m => Imp handle m -> handle -> m Int
 arrayLength' i h = do x <- getchar i h
                       case x of
-                        Nothing  -> error "Expected array, not EOF"
+                        Nothing  -> fail "Expected array, not EOF"
                         Just '[' -> go 0
-                        Just c   -> error ("Expected array, not " ++ show c)
+                        Just c   -> fail ("Expected array, not " ++ show c)
   where go !n = do spaceEater i h
                    c <- lookahead i h
                    case c of
-                     Nothing  -> error "EOF reading array"
+                     Nothing  -> fail "EOF reading array"
                      Just ']' -> getchar    i h >> pure n
                      Just _   -> skipValue' i h >> go (n+1)
 
 objectLength :: Handle -> IO Int
 objectLength = objectLength' io
 
-objectLength' :: Monad m => Imp handle m -> handle -> m Int
+objectLength' :: MonadFail m => Imp handle m -> handle -> m Int
 objectLength' i h = do x <- getchar i h
                        case x of
-                         Nothing  -> error "EOF reading object"
+                         Nothing  -> fail "EOF reading object"
                          Just '{' -> go 0
-                         Just c   -> error ("Expected '{' not " ++ show c)
+                         Just c   -> fail ("Expected '{' not " ++ show c)
   where go !n = do spaceEater i h
                    c <- lookahead i h
                    case c of
-                     Nothing  -> error "Unterminated object"
+                     Nothing  -> fail "Unterminated object"
                      Just '}' -> getchar    i h >> pure n
                      Just _   -> skipValue' i h >> spaceEater i h >>
                                  skipValue' i h >> go (n+1)
@@ -131,14 +131,14 @@ objectLength' i h = do x <- getchar i h
 skipValue :: Handle -> IO ()
 skipValue = skipValue' io
 
-skipValue' :: Monad m => Imp handle m -> handle -> m ()
+skipValue' :: MonadFail m => Imp handle m -> handle -> m ()
 skipValue' i h = do x <- lookahead i h
-                    _ <- case x of
-                           Nothing  -> error "Expected value, hit EOF"
-                           Just '[' ->  arrayLength' i h
-                           Just '{' -> objectLength' i h
-                           Just '"' -> stringLength' i h
-                           Just _   ->  fixedLength' i h
+                    case x of
+                      Nothing  -> fail "Expected value, hit EOF"
+                      Just '[' ->  arrayLength' i h
+                      Just '{' -> objectLength' i h
+                      Just '"' -> stringLength' i h
+                      Just _   ->  fixedLength' i h
                     pure ()
 
 -- | Write a 32bit word as bytes in big-endian order
@@ -151,7 +151,7 @@ writeInt32 i n = putBytes i bytes
                  fromIntegral  n               ]
 
 -- | Read a JSON object from h and write the equivalent MsgPack to stdout.
-writeMap :: Monad m => Imp handle m -> handle -> m ()
+writeMap :: MonadFail m => Imp handle m -> handle -> m ()
 writeMap i h = do
   startPos <- tell          i h
   n        <- objectLength' i h
@@ -163,26 +163,25 @@ writeMap i h = do
   x <- getchar i h  -- Ready for the next value
   case x of
     Just '}' -> pure ()
-    _        -> undefined
-  pure ()
+    _        -> fail "Missing '}'"
 
 -- | Read a JSON keyword (null, true or false) from h and write the equivalent
 --   MsgPack to stdout.
-writeFixed :: Monad m => Imp handle m -> handle -> m ()
+writeFixed :: MonadFail m => Imp handle m -> handle -> m ()
 writeFixed i h = do x <- lookahead i h
-                    let (b, n) = case x of
-                                   Just 'n' -> (0xc0, 4)  -- null
-                                   Just 'f' -> (0xc2, 5)  -- false
-                                   Just 't' -> (0xc3, 4)  -- true
-                                   Just c   -> error ("Unexpected char " ++
-                                                      show c)
-                                   Nothing  -> error "Hit EOF"
+                    (b, n) <- case x of
+                                Just 'n' -> pure (0xc0, 4)  -- null
+                                Just 'f' -> pure (0xc2, 5)  -- false
+                                Just 't' -> pure (0xc3, 4)  -- true
+                                Just c   -> fail ("Unexpected char " ++
+                                                  show c)
+                                Nothing  -> fail "Hit EOF"
                     putBytes i [b]
                     seek i h RelativeSeek n
                     spaceEater i h
 
 -- | Read a JSON array from h and write the equivalent MsgPack to stdout.
-writeArray :: Monad m => Imp handle m -> handle -> m ()
+writeArray :: MonadFail m => Imp handle m -> handle -> m ()
 writeArray i h = do
   startPos <- tell         i h
   n        <- arrayLength' i h
@@ -195,7 +194,7 @@ writeArray i h = do
   pure ()
 
 -- | Read a JSON string from h and write the equivalent MsgPack to stdout.
-writeString :: Monad m => Imp handle m -> handle -> m ()
+writeString :: MonadFail m => Imp handle m -> handle -> m ()
 writeString i h = do startPos <- tell i h
                      n        <- stringLength' i h
                      seek i h AbsoluteSeek (startPos + 1)  -- Swallow the '"'
@@ -211,13 +210,13 @@ writeString i h = do startPos <- tell i h
                     Just '\\' -> do y <- getchar i h
                                     case y of
                                       Just c  -> putchar i c >> go (n-1)
-                                      Nothing -> error "Unexpected EOF"
-                    Just c    ->                putchar i c >> go (n-1)
-                    Nothing   -> error "Unexpected EOF"
+                                      Nothing -> fail "Unexpected EOF"
+                    Just c    ->                 putchar i c >> go (n-1)
+                    Nothing   -> fail "Unexpected EOF"
 
 -- | Reads a single JSON value from h, possibly prefixed by whitespace and/or
 --   ',' or ':'. Writes the equivalent MsgPack to stdout.
-writeValue :: Monad m => Imp handle m -> handle -> m ()
+writeValue :: MonadFail m => Imp handle m -> handle -> m ()
 writeValue i h = do spaceEater     i h
                     c <- lookahead i h
                     case c of
@@ -225,10 +224,10 @@ writeValue i h = do spaceEater     i h
                       Just '[' -> writeArray  i h
                       Just '"' -> writeString i h
                       Just _   -> writeFixed  i h
-                      Nothing  -> error "Unexpected EOF"
+                      Nothing  -> fail "Unexpected EOF"
 
 main :: IO ()
 main = do args <- getArgs
           case args of
             [f] -> withFile f ReadMode (writeValue io)
-            _   -> error "Need one filepath argument"
+            _   -> fail "Need one filepath argument"

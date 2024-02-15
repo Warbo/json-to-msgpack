@@ -1,6 +1,7 @@
 module Lengths where
 
 import           Control.Monad.State.Lazy (get, put, runState, State)
+import           Data.Functor.Identity      (Identity)
 import           Generators
 import qualified JSONToMsgPack            as J
 import           System.IO                (SeekMode(..))
@@ -8,6 +9,9 @@ import           Test.QuickCheck
 
 -- | Represent state as a zipper, so we can wind it forward and backwards
 type TestM = State (String, String)
+
+instance MonadFail Identity where
+  fail = error
 
 readImp :: J.Imp () TestM
 readImp = J.I {
