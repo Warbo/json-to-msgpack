@@ -1,29 +1,11 @@
-{
-  hsPkgs ? (pkgs.haskellPackages.override (_: {
-             overrides = self: super: {
-               json-to-msgpack = self.callPackage
-                 (self.haskellSrc2nix {
-                   name = "json-to-msgpack";
-                   src  = ./.;
-                 })
-                 {};
+{ json-to-msgpack ? import ./. { }, nix-helpers ? import nix/nix-helpers.nix { }
+, nixpkgs ? nix-helpers.nixpkgs, lzip ? nixpkgs.lzip
+, runCommand ? nixpkgs.runCommand }:
 
-               hedgehog = pkgs.haskell.lib.dontCheck super.hedgehog;
-             };
-           })),
-
-  json-to-msgpack ? hsPkgs.json-to-msgpack,
-  lzip            ? pkgs.lzip,
-  pkgs            ? import <nixpkgs> {},
-  runCommand      ? pkgs.runCommand
-}:
-
-runCommand "test-json-to-msgpack"
-  {
-    buildInputs = [ json-to-msgpack lzip ];
-    f = ./test/example.json.lz;
-  }
-  ''
-    lzip -d < "$f" > example.json
-    json-to-msgpack example.json | lzip > "$out"
-  ''
+runCommand "test-json-to-msgpack" {
+  buildInputs = [ json-to-msgpack lzip ];
+  f = ./test/example.json.lz;
+} ''
+  lzip -d < "$f" > example.json
+  json-to-msgpack example.json | lzip > "$out"
+''
