@@ -2,7 +2,8 @@
 
 module Writers where
 
-import           Control.Monad.State.Lazy   (get, put, replicateM_, runState, State)
+import           Control.Monad              (replicateM_)
+import           Control.Monad.State.Lazy   (get, put, runState, State)
 import qualified Data.ByteString            as BS
 import qualified Data.ByteString.Char8      as BSC
 import qualified Data.ByteString.Lazy.Char8 as BSL
